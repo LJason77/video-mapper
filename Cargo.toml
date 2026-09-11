@@ -5,6 +5,10 @@ authors = ["LJason <ljason@ljason77.com>"]
 edition = "2024"
 license-file = "LICENSE"
 
+[[bin]]
+name = "vmap"
+path = "src/main.rs"
+
 [lints.clippy]
 pedantic = { level = "deny", priority = -1 }
 unwrap_used = "deny"
