@@ -18,3 +18,23 @@ panic = "abort"
 strip = "symbols"
 
 [dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+futures = "0.3"
+percent-encoding = "2"
+rand = "0.10"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
+walkdir = "2"
+
+[dependencies.sqlx]
+version = "0.9"
+default-features = false
+features = ["runtime-tokio", "tls-native-tls", "macros", "sqlite"]
+
+[dependencies.tokio]
+version = "1"
+default-features = false
+features = ["rt-multi-thread", "macros"]
