@@ -65,24 +65,29 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // 初始化日志系统
-    let filter = if cli.verbose { EnvFilter::new("debug") } else { EnvFilter::new("info") };
+    let filter = if cli.verbose { EnvFilter::new("debug,sqlx=error") } else { EnvFilter::new("info,sqlx=error") };
     tracing_subscriber::fmt().with_env_filter(filter).with_timer(time::OffsetTime::local_rfc_3339().context("无法获得本地时差！")?).init();
     // 加载配置文件
     let configs = Arc::new(Config::from_file(&cli.config)?);
+    tracing::debug!("已加载配置文件：{}", cli.config.display());
     // 初始化数据库
     let db = Database::init_pool(&cli.db).await?;
+    tracing::debug!("已初始化数据库：{}", cli.db.display());
 
     // 收集并去重所有根路径
     let all_paths: Vec<PathBuf> = configs.iter().flat_map(|cfg| cfg.list.iter()).flat_map(|item| item.paths.iter().cloned()).collect();
     let roots = Arc::new(scanner::deduplicate_roots(all_paths));
+    tracing::debug!("已收集 {} 个根路径：{:?}", roots.len(), roots);
 
     // 扫描所有根路径，收集视频文件绝对路径集合
     let roots_for_scan = Arc::clone(&roots);
     let video_paths = tokio::task::spawn_blocking(move || scanner::scan_videos(&roots_for_scan)).await.context("目录扫描任务失败")?;
+    tracing::debug!("已扫描 {} 个视频文件", video_paths.len());
     let video_paths = Arc::new(video_paths);
 
     // 预取数据库中的已有路径
     let cached_paths = Arc::new(db.get_all_paths().await?);
+    tracing::debug!("已预取 {} 个数据库中已有的视频路径", cached_paths.len());
 
     // 并发探测未缓存的视频
     let concurrency = if cli.threads == 0 { std::thread::available_parallelism().map_or(1, std::num::NonZero::get) } else { cli.threads };
@@ -134,6 +139,7 @@ async fn process_video(db: &Database, video_path: &Path) -> Result<()> {
             return Ok(());
         }
     };
+    tracing::debug!("已解析视频 {}：{:?}", video_path.display(), info.orientation);
 
     let record = VideoRecord { path: video_path.to_path_buf(), width: info.width, height: info.height, orientation: info.orientation };
 
