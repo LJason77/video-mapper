@@ -16,6 +16,15 @@ use walkdir::WalkDir;
 /// 支持的视频文件扩展名（小写，不含点）。
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "flv", "ts", "m2ts", "rmvb", "webm", "wmv", "m4v", "mpg", "mpeg"];
 
+/// 扫描时跳过其子树的目录名。
+///
+/// 目前仅包含 `lost+found`——ext2/3/4 文件系统在挂载点根目录自动创建的元数据目录，权限通常为 `0700` 且属主为 root。
+/// 非 root 进程遍历时会触发 `EACCES`，产生无意义的警告。
+/// 该目录永远不包含用户视频文件，跳过安全。
+///
+/// 匹配基于**目录条目名**（不含路径），因此任意深度的同名目录都会被跳过。
+const SKIPPED_DIR_NAMES: &[&str] = &["lost+found"];
+
 /// 收集并去重所有需要扫描的根路径。
 ///
 /// 处理流程：
@@ -93,7 +102,7 @@ pub fn scan_videos(roots: &[PathBuf]) -> HashSet<PathBuf> {
 
     for root in roots {
         // 每个根路径单独遍历，避免一个根路径错误影响其他根路径
-        let walker = WalkDir::new(root).follow_links(false).into_iter().filter_map(|e| match e {
+        let walker = WalkDir::new(root).follow_links(false).into_iter().filter_entry(|entry| !is_skipped_dir(entry)).filter_map(|e| match e {
             Ok(entry) => Some(entry),
             Err(err) => {
                 tracing::warn!("遍历目录 {} 时出错：{err}", root.display());
@@ -115,6 +124,15 @@ pub fn scan_videos(roots: &[PathBuf]) -> HashSet<PathBuf> {
     }
 
     videos
+}
+
+/// 判断给定目录条目是否属于需要跳过子树的目录。
+///
+/// 仅对目录类型返回 `true`：同名的普通文件不会被跳过。
+/// `entry.file_name()` 返回条目自身的名字（不含路径），与 [`SKIPPED_DIR_NAMES`] 逐项比较。
+#[inline]
+fn is_skipped_dir(entry: &walkdir::DirEntry) -> bool {
+    entry.file_type().is_dir() && SKIPPED_DIR_NAMES.iter().any(|name| entry.file_name() == OsStr::new(name))
 }
 
 /// 判断给定路径是否具有视频文件扩展名（ASCII 大小写不敏感）。
